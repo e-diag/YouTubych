@@ -118,13 +118,16 @@ type groundingMetadata struct {
 // GenerateAnswer requests a response with automatic multi-model failover.
 // If one free model experiences 503 high demand, 429 rate limit, or 404, it immediately tries the next candidate.
 func (c *Client) GenerateAnswer(ctx context.Context, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
-	// Candidate pool of free Flash models in order of priority
+	// Candidate pool of free Flash models verified to work on free tier
 	rawCandidates := []string{
 		c.model,
-		"gemini-3.7-flash",
-		"gemini-3.5-flash",
 		"gemini-flash-latest",
+		"gemini-3.5-flash",
+		"gemini-3.6-flash",
 		"gemini-3.5-flash-lite",
+		"gemini-3.1-flash-lite",
+		"gemini-flash-lite-latest",
+		"gemini-3.7-flash",
 		"gemini-3.8-flash",
 	}
 
