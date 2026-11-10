@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,29 +115,60 @@ type groundingMetadata struct {
 	} `json:"groundingChunks"`
 }
 
-// GenerateAnswer requests a response with optional Google Search Grounding.
-// If grounding fails or quota is exhausted, it attempts fallback without tools.
+// GenerateAnswer requests a response with automatic multi-model failover.
+// If one free model experiences 503 high demand, 429 rate limit, or 404, it immediately tries the next candidate.
 func (c *Client) GenerateAnswer(ctx context.Context, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
-	resp, err := c.callAPI(ctx, systemPrompt, userPrompt, useSearch)
-	if err != nil {
-		// If failed with search tool enabled, try fallback without search
+	// Candidate pool of free Flash models in order of priority
+	rawCandidates := []string{
+		c.model,
+		"gemini-3.7-flash",
+		"gemini-3.5-flash",
+		"gemini-flash-latest",
+		"gemini-3.5-flash-lite",
+		"gemini-3.8-flash",
+	}
+
+	// Deduplicate while preserving order
+	seen := make(map[string]bool)
+	var candidateModels []string
+	for _, m := range rawCandidates {
+		m = strings.TrimSpace(m)
+		if m != "" && !seen[m] {
+			seen[m] = true
+			candidateModels = append(candidateModels, m)
+		}
+	}
+
+	var lastErr error
+	for _, modelName := range candidateModels {
+		// Attempt 1: With Search Grounding (if requested)
+		resp, err := c.callAPI(ctx, modelName, systemPrompt, userPrompt, useSearch)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		// If failed with search enabled, attempt same model without search
 		if useSearch {
-			fallbackResp, fallbackErr := c.callAPI(ctx, systemPrompt, userPrompt, false)
+			fallbackResp, fallbackErr := c.callAPI(ctx, modelName, systemPrompt, userPrompt, false)
 			if fallbackErr == nil {
 				return fallbackResp, nil
 			}
-			// If fallback also failed due to quota
-			if errors.Is(fallbackErr, ErrQuotaExhausted) {
-				return "", ErrQuotaExhausted
-			}
+			lastErr = fallbackErr
 		}
-		return "", err
+
+		log.Printf("[Gemini Fallback] Model %s unavailable (%v), failing over to next free model...", modelName, lastErr)
 	}
-	return resp, nil
+
+	if errors.Is(lastErr, ErrQuotaExhausted) {
+		return "", ErrQuotaExhausted
+	}
+	return "", lastErr
 }
 
-func (c *Client) callAPI(ctx context.Context, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
+func (c *Client) callAPI(ctx context.Context, modelName string, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, modelName, c.apiKey)
 
 	reqData := requestPayload{
 		Contents: []content{
