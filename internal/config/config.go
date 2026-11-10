@@ -41,7 +41,7 @@ func Load() (*Config, error) {
 
 	geminiModel := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if geminiModel == "" {
-		geminiModel = "gemini-2.0-flash"
+		geminiModel = "gemini-3.8-flash"
 	}
 
 	allowedChatStr := strings.TrimSpace(os.Getenv("ALLOWED_CHAT_ID"))
