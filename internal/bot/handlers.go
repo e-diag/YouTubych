@@ -123,7 +123,7 @@ func (h *BotHandler) respondToDirectAddress(msg *tgbotapi.Message, user *databas
 	typing := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
 	_, _ = h.bot.Send(typing)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 	defer cancel()
 
 	// Load learned facts

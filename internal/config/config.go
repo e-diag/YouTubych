@@ -43,7 +43,7 @@ func Load() (*Config, error) {
 
 	geminiModel := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if geminiModel == "" {
-		geminiModel = "gemini-flash-latest"
+		geminiModel = "gemini-3.5-flash"
 	}
 
 	geminiBaseURL := strings.TrimSpace(os.Getenv("GEMINI_BASE_URL"))

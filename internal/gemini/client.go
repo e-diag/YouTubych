@@ -118,17 +118,14 @@ type groundingMetadata struct {
 // GenerateAnswer requests a response with automatic multi-model failover.
 // If one free model experiences 503 high demand, 429 rate limit, or 404, it immediately tries the next candidate.
 func (c *Client) GenerateAnswer(ctx context.Context, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
-	// Candidate pool of free Flash models verified to work on free tier
+	// Candidate pool of free Flash models verified to work on free tier (gemini-3.5-flash is rock solid)
 	rawCandidates := []string{
-		c.model,
-		"gemini-flash-latest",
 		"gemini-3.5-flash",
 		"gemini-3.6-flash",
 		"gemini-3.5-flash-lite",
-		"gemini-3.1-flash-lite",
 		"gemini-flash-lite-latest",
-		"gemini-3.7-flash",
-		"gemini-3.8-flash",
+		"gemini-flash-latest",
+		c.model,
 	}
 
 	// Deduplicate while preserving order
@@ -144,18 +141,28 @@ func (c *Client) GenerateAnswer(ctx context.Context, systemPrompt string, userPr
 
 	var lastErr error
 	for _, modelName := range candidateModels {
+		// Each model attempt gets up to 12s so one slow model never starves the others
+		attemptCtx, cancelAttempt := context.WithTimeout(ctx, 12*time.Second)
+
 		// Attempt 1: With Search Grounding (if requested)
-		resp, err := c.callAPI(ctx, modelName, systemPrompt, userPrompt, useSearch)
+		resp, err := c.callAPI(attemptCtx, modelName, systemPrompt, userPrompt, useSearch)
+		cancelAttempt()
+
 		if err == nil {
+			log.Printf("[Gemini Success] Successfully generated response using model %s", modelName)
 			return resp, nil
 		}
 
 		lastErr = err
 
-		// If failed with search enabled, attempt same model without search
+		// If failed with search enabled, immediately attempt same model without search (fast fallback)
 		if useSearch {
-			fallbackResp, fallbackErr := c.callAPI(ctx, modelName, systemPrompt, userPrompt, false)
+			noSearchCtx, cancelNoSearch := context.WithTimeout(ctx, 10*time.Second)
+			fallbackResp, fallbackErr := c.callAPI(noSearchCtx, modelName, systemPrompt, userPrompt, false)
+			cancelNoSearch()
+
 			if fallbackErr == nil {
+				log.Printf("[Gemini Success] Successfully generated response using model %s (without search tool)", modelName)
 				return fallbackResp, nil
 			}
 			lastErr = fallbackErr
