@@ -16,6 +16,8 @@ type Config struct {
 	TelegramBotToken string
 	GeminiAPIKey     string
 	GeminiModel      string
+	GeminiBaseURL    string
+	ProxyURL         string
 	AllowedChatID    int64
 	OwnerTGID        int64
 	SilenceDuration  time.Duration
@@ -43,6 +45,14 @@ func Load() (*Config, error) {
 	if geminiModel == "" {
 		geminiModel = "gemini-3.8-flash"
 	}
+
+	geminiBaseURL := strings.TrimSpace(os.Getenv("GEMINI_BASE_URL"))
+	if geminiBaseURL == "" {
+		geminiBaseURL = "https://generativelanguage.googleapis.com"
+	}
+	geminiBaseURL = strings.TrimRight(geminiBaseURL, "/")
+
+	proxyURL := strings.TrimSpace(os.Getenv("PROXY_URL"))
 
 	allowedChatStr := strings.TrimSpace(os.Getenv("ALLOWED_CHAT_ID"))
 	if allowedChatStr == "" {
@@ -95,6 +105,8 @@ func Load() (*Config, error) {
 		TelegramBotToken: botToken,
 		GeminiAPIKey:     geminiKey,
 		GeminiModel:      geminiModel,
+		GeminiBaseURL:    geminiBaseURL,
+		ProxyURL:         proxyURL,
 		AllowedChatID:    allowedChatID,
 		OwnerTGID:        ownerTGID,
 		SilenceDuration:  silenceDuration,

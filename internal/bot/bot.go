@@ -41,7 +41,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 	log.Printf("[Bot] Authorized on account @%s (ID: %d)", tgBot.Self.UserName, tgBot.Self.ID)
 
 	// Initialize Gemini Client
-	geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel)
+	geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL, cfg.ProxyURL)
 
 	// Initialize Rate Limiter
 	limiter := NewRateLimiter(cfg.UserCooldown, cfg.GroupCooldown)

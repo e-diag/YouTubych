@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -22,19 +23,37 @@ var (
 type Client struct {
 	apiKey     string
 	model      string
+	baseURL    string
 	httpClient *http.Client
 }
 
-// NewClient creates a new Gemini client.
-func NewClient(apiKey, model string) *Client {
+// NewClient creates a new Gemini client with optional proxy and custom base URL.
+func NewClient(apiKey, model, baseURL, proxyURL string) *Client {
 	if model == "" {
 		model = "gemini-3.8-flash"
 	}
+	if baseURL == "" {
+		baseURL = "https://generativelanguage.googleapis.com"
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+	}
+
+	if proxyURL != "" {
+		if parsedProxy, err := url.Parse(proxyURL); err == nil {
+			transport.Proxy = http.ProxyURL(parsedProxy)
+		}
+	}
+
 	return &Client{
-		apiKey: apiKey,
-		model:  model,
+		apiKey:  apiKey,
+		model:   model,
+		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 45 * time.Second,
+			Transport: transport,
+			Timeout:   45 * time.Second,
 		},
 	}
 }
@@ -117,7 +136,7 @@ func (c *Client) GenerateAnswer(ctx context.Context, systemPrompt string, userPr
 }
 
 func (c *Client) callAPI(ctx context.Context, systemPrompt string, userPrompt string, useSearch bool) (string, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", c.model, c.apiKey)
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
 
 	reqData := requestPayload{
 		Contents: []content{
