@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -118,6 +119,30 @@ func (h *BotHandler) handleAllowedGroupMessage(msg *tgbotapi.Message) {
 	}
 }
 
+var boldMarkdownRegex = regexp.MustCompile(`\*\*(.*?)\*\*`)
+
+func (h *BotHandler) sendReplySafely(chatID int64, replyToMessageID int, text string) bool {
+	// Convert markdown **bold** to Telegram HTML <b>bold</b>
+	formatted := boldMarkdownRegex.ReplaceAllString(text, "<b>$1</b>")
+
+	msg := tgbotapi.NewMessage(chatID, formatted)
+	if replyToMessageID != 0 {
+		msg.ReplyToMessageID = replyToMessageID
+	}
+	msg.ParseMode = "HTML"
+
+	if _, err := h.bot.Send(msg); err != nil {
+		// Fallback: send clean plain text without parse mode if HTML parsing fails
+		msg.ParseMode = ""
+		msg.Text = text
+		if _, plainErr := h.bot.Send(msg); plainErr != nil {
+			log.Printf("[Send Error] Failed to send message to chat %d: %v", chatID, plainErr)
+			return false
+		}
+	}
+	return true
+}
+
 func (h *BotHandler) respondToDirectAddress(msg *tgbotapi.Message, user *database.UserProfile, text string) {
 	// Send typing action to make response feel natural
 	typing := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
@@ -139,9 +164,7 @@ func (h *BotHandler) respondToDirectAddress(msg *tgbotapi.Message, user *databas
 		replyText = "Слушай, прямо сейчас мои поисковые радары немного барахлят, чтобы не выдумывать — врать не буду, свежей инфы нет под рукой. Кто в чате уже сталкивался, подскажите человеку!"
 	}
 
-	replyMsg := tgbotapi.NewMessage(msg.Chat.ID, replyText)
-	replyMsg.ReplyToMessageID = msg.MessageID
-	if _, sendErr := h.bot.Send(replyMsg); sendErr == nil {
+	if h.sendReplySafely(msg.Chat.ID, msg.MessageID, replyText) {
 		h.limiter.RecordResponse(msg.From.ID)
 		_ = h.db.IncrementStat("direct_replies_sent")
 	}
@@ -166,9 +189,7 @@ func (h *BotHandler) tryAnswerAmbientQuestion(msg *tgbotapi.Message, text string
 	typing := tgbotapi.NewChatAction(msg.Chat.ID, tgbotapi.ChatTyping)
 	_, _ = h.bot.Send(typing)
 
-	replyMsg := tgbotapi.NewMessage(msg.Chat.ID, trimmed)
-	replyMsg.ReplyToMessageID = msg.MessageID
-	if _, sendErr := h.bot.Send(replyMsg); sendErr == nil {
+	if h.sendReplySafely(msg.Chat.ID, msg.MessageID, trimmed) {
 		h.limiter.RecordResponse(msg.From.ID)
 		_ = h.db.IncrementStat("ambient_replies_sent")
 	}

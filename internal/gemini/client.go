@@ -189,7 +189,7 @@ func (c *Client) callAPI(ctx context.Context, modelName string, systemPrompt str
 		},
 		GenerationConfig: &generationConfig{
 			Temperature:     0.7,
-			MaxOutputTokens: 800,
+			MaxOutputTokens: 2048,
 		},
 	}
 
